@@ -7,7 +7,7 @@ import { moveRoom, orderRooms } from './roomorder';
 import { h, iconButton, KeyedList, setAttr, setHidden, setStyleVar, setText, setTitle } from './dom';
 import { plural, shortPath } from './format';
 import { ICONS } from './icons';
-import { groupRooms, type AgentNode, type RoomGroup } from './model';
+import { AGENT_CLASS_FILTER_COLOR, AGENT_CLASS_FILTER_LABEL, groupRooms, type AgentClassFilter, type AgentNode, type RoomGroup } from './model';
 import { officeIsEmpty } from './overlays';
 import { createAgentRow, updateAgentRow } from './rows';
 import { createAccountChip, createProgress, updateAccountChip, updateProgress } from './widgets';
@@ -40,7 +40,10 @@ export class Sidebar implements UiComponent {
   readonly el: HTMLElement;
   private input: HTMLInputElement;
   private query = '';
+  private classFilter: AgentClassFilter = 'all';
+  private classFilterBtns: Map<AgentClassFilter, HTMLButtonElement> = new Map();
   private filters: HTMLElement;
+  private classFilters: HTMLElement;
   private filterList: KeyedList<AccountInfo, HTMLButtonElement>;
   private scroller: HTMLElement;
   private rooms: KeyedList<RoomGroup>;
@@ -103,6 +106,21 @@ export class Sidebar implements UiComponent {
       },
     });
 
+    // Filtros de classificação de agentes
+    this.classFilters = h('div', { class: 'ui-class-filters', role: 'group', attrs: { 'aria-label': tr('Filtrar por estado') } });
+    for (const key of ['all', 'active', 'idle', 'historical', 'subagents', 'temp'] as AgentClassFilter[]) {
+      const btn = h('button', {
+        class: 'ui-class-filter',
+        type: 'button',
+        text: AGENT_CLASS_FILTER_LABEL[key],
+        on: { click: () => this.setClassFilter(key) },
+      });
+      btn.style.setProperty('--filter-color', AGENT_CLASS_FILTER_COLOR[key]);
+      this.classFilterBtns.set(key, btn);
+      this.classFilters.append(btn);
+    }
+    this.updateClassFilterButtons();
+
     this.scroller = h('div', { class: 'ui-side__scroll' });
     const list = h('div', { class: 'ui-rooms', role: 'list', attrs: { 'aria-label': tr('Salas') } });
     this.scroller.append(list);
@@ -121,6 +139,7 @@ export class Sidebar implements UiComponent {
         click: () => {
           this.input.value = '';
           this.query = '';
+          this.setClassFilter('all');
           this.ctx.updatePrefs({ hiddenAccounts: [] });
         },
       },
@@ -132,7 +151,7 @@ export class Sidebar implements UiComponent {
     this.el = h(
       'aside',
       { class: 'ui-panel ui-sidebar', attrs: { 'aria-label': tr('Salas e agentes'), id: 'ui-sidebar' } },
-      h('div', { class: 'ui-side__head' }, h('div', { class: 'ui-side__title' }, h('h2', { text: tr('Escritório') }), close), search, this.filters),
+      h('div', { class: 'ui-side__head' }, h('div', { class: 'ui-side__title' }, h('h2', { text: tr('Escritório') }), close), search, this.classFilters, this.filters),
       this.scroller,
     );
   }
@@ -142,19 +161,33 @@ export class Sidebar implements UiComponent {
     this.input.select();
   }
 
+  private setClassFilter(filter: AgentClassFilter): void {
+    if (this.classFilter === filter) return;
+    this.classFilter = filter;
+    this.updateClassFilterButtons();
+    this.ctx.invalidate();
+  }
+
+  private updateClassFilterButtons(): void {
+    for (const [key, btn] of this.classFilterBtns) {
+      btn.classList.toggle('is-active', key === this.classFilter);
+    }
+  }
+
   render(): void {
     const snap = this.ctx.store.snapshot;
     const accounts = snap?.accounts ?? [];
     const hidden = new Set(this.ctx.prefs.hiddenAccounts);
     this.filterList.sync(accounts.length > 1 ? accounts : []);
     setHidden(this.filters, accounts.length <= 1);
+    this.updateClassFilterButtons();
 
     // Ordem das salas escolhida pelo usuário (arrastando o cabeçalho da sala).
-    const groups = orderRooms(groupRooms(snap, { query: this.query, hiddenAccounts: hidden }), (g) => g.room.id);
+    const groups = orderRooms(groupRooms(snap, { query: this.query, hiddenAccounts: hidden, classFilter: this.classFilter }), (g) => g.room.id);
     this.shownRooms = groups.map((g) => g.room.id);
     this.rooms.sync(groups);
 
-    const filtering = this.query.trim().length > 0 || hidden.size > 0;
+    const filtering = this.query.trim().length > 0 || hidden.size > 0 || this.classFilter !== 'all';
     const total = snap?.agents.length ?? 0;
     // Escritório vazio sem filtro: o cartão central já explica; a lista não repete o aviso.
     const showEmpty = groups.length === 0 && (filtering || !officeIsEmpty(this.ctx));
@@ -165,7 +198,9 @@ export class Sidebar implements UiComponent {
         filtering && total > 0
           ? this.query.trim()
             ? tr('Nenhum agente encontrado para “{0}”.', [this.query.trim()])
-            : tr('Nenhum agente nas contas selecionadas.')
+            : this.classFilter !== 'all'
+              ? tr('Nenhum agente com filtro “{0}”.', [AGENT_CLASS_FILTER_LABEL[this.classFilter]])
+              : tr('Nenhum agente nas contas selecionadas.')
           : tr('Nenhuma sessão aberta no momento.'),
       );
       setHidden(this.clearBtn, !(filtering && total > 0));

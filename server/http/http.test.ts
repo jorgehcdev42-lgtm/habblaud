@@ -126,7 +126,9 @@ describe('API HTTP', () => {
     await readUntil(/event: feed\n/);
     expect(text).toMatch(/^retry: 2000\n\nevent: snapshot\ndata: \{/);
     env.office.addActivity('.claude:1', { id: 'act-x', at: Date.now(), kind: 'read', icon: '📖', text: 'Lendo a.ts' }, true);
-    await readUntil(/"id":"act-x"/);
+    // Espera o evento `feed` inteiro, não só o id: o snapshot seguinte também carrega a atividade em `recent`, e a
+    // ordem de entrega entre os dois eventos varia com a carga da máquina.
+    await readUntil(/event: feed\ndata: \[\{"id":"act-x"/);
     expect(text).toContain('event: feed\ndata: [{"id":"act-x"');
     ctrl.abort();
   });
@@ -138,6 +140,18 @@ describe('API HTTP', () => {
     expect((await fetch(`${env.base}/api/agents/nao-existe`)).status).toBe(404);
     const health = await (await fetch(`${env.base}/api/health`)).json();
     expect(health).toMatchObject({ ok: true, version: '9.9.9', demo: false, docker: false, terminal: false, accounts: [{ id: '.claude', usageStatus: 'disabled' }] });
+  });
+
+  it('o agente no snapshot já vem classificado (runState, origem, papel)', async () => {
+    const snap = await snapshotOf(env.base);
+    expect(snap.agents[0]).toMatchObject({ runState: 'ACTIVE', agentClass: 'ACTIVE', sessionOrigin: 'PROJECT', agentRole: 'MAIN' });
+  });
+
+  it('GET /api/metrics: leve, só leitura, sem contadores quando o módulo não foi ligado', async () => {
+    const res = await fetch(`${env.base}/api/metrics`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, pid: process.pid });
+    expect((await fetch(`${env.base}/api/metrics`, { method: 'POST', headers: JSON_HEADERS, body: '{}' })).status).toBe(405);
   });
 
   it('GET /api/updates e POST /api/updates/check sem verificador: desligado', async () => {

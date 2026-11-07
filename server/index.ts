@@ -192,9 +192,10 @@ const terminals = config.terminal
   ? new TerminalStreams({ office, transcriptPathOf: (id) => agents.transcriptPathOf(id), parserFor: (id) => agents.parserFor(id) })
   : undefined;
 // Histórico do terminal (sessões recentes, abertas ou encerradas, de todas as ferramentas): mesma trava.
-const history = config.terminal
-  ? new HistorySet([new SessionHistory({ accounts: () => accounts.entries(), openAgentOf: (acc, sid) => openMainAgent(office.list(), acc, sid) })])
+const terminalHistory = config.terminal
+  ? new SessionHistory({ accounts: () => accounts.entries(), openAgentOf: (acc, sid) => openMainAgent(office.list(), acc, sid) })
   : undefined;
+const history = terminalHistory ? new HistorySet([terminalHistory]) : undefined;
 if (history && codex) history.add(new CodexHistory({ accounts: () => accounts.entriesOf('codex'), openAgentOf: (acc, sid) => openMainAgent(office.list(), acc, sid) }));
 // Entregas: o fim de cada pedido, lido dos transcripts do histórico (mesma trava do terminal). Os arquivos entregues
 // são lidos aqui (Node, ou pasta de conta montada no Docker) ou pelo auxiliar do host.
@@ -373,6 +374,16 @@ const api = createApiHandler({
   },
   codexLive,
   stats,
+  metrics: {
+    history: terminalHistory ? { reads: terminalHistory.reads, get cacheSize() { return terminalHistory?.cacheSize ?? 0; } } : undefined,
+    counts: () => {
+      const snap = hub.current();
+      const accCount = accounts.allEntries().length;
+      const subs = snap.agents.reduce((acc, a) => acc + (a.kind === 'sub' ? 1 : 0), 0);
+      return { agents: snap.agents.length, subs, rooms: snap.rooms.length, accounts: accCount };
+    },
+    startedAt,
+  },
   updates,
   remote: config.remote ? { is: isRemoteRequest, allows: (f) => config.remote!.allow.has(f) } : undefined,
   world: world ? createWorldRoutes(world, worldViewer, worldSocial) : undefined,

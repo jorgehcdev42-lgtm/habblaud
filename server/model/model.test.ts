@@ -444,6 +444,33 @@ describe('Office', () => {
     expect(snap.rooms).toEqual([]);
   });
 
+  it('classifica cada agente do snapshot: esperando/trabalhando é sempre ACTIVE, parado há tempo é IDLE, /tmp é TEMP', () => {
+    const { office, advance, now } = makeOffice();
+    office.addMain({ id: 'acc:1', account: 'acc', sessionId: 's1', cwd: '/p/a', role: 'x', startedAt: now(), status: 'waiting' });
+    office.addMain({ id: 'acc:2', account: 'acc', sessionId: 's2', cwd: '/p/b', role: 'x', startedAt: now(), status: 'idle' });
+    office.addMain({ id: 'acc:3', account: 'acc', sessionId: 's3', cwd: '/tmp/scratch', role: 'x', startedAt: now(), status: 'working' });
+    office.addSub({ id: 's1:x', parentId: 'acc:1', sessionId: 's1', role: 'Explore', background: false, startedAt: now() });
+    advance(10 * 60_000); // 10 min sem nenhum evento novo
+    const byId = new Map(office.commit().snapshot.agents.map((a) => [a.id, a]));
+    // esperar uma permissão por muito tempo não faz o agente virar ocioso
+    expect(byId.get('acc:1')).toMatchObject({ runState: 'ACTIVE', agentClass: 'ACTIVE', sessionOrigin: 'PROJECT', agentRole: 'MAIN' });
+    expect(byId.get('acc:2')).toMatchObject({ runState: 'IDLE', agentClass: 'IDLE' });
+    expect(byId.get('acc:3')).toMatchObject({ runState: 'ACTIVE', sessionOrigin: 'TEMP' });
+    expect(byId.get('s1:x')).toMatchObject({ agentRole: 'SUBAGENT' });
+    office.closeMain('acc:2');
+    expect(office.commit().snapshot.agents.find((a) => a.id === 'acc:2')).toMatchObject({ runState: 'HISTORICAL', agentClass: 'HISTORICAL' });
+  });
+
+  it('o demo também sai classificado, sem alterar os objetos do simulador', () => {
+    const { office } = makeOffice();
+    office.setDemo(true);
+    const first = office.commit().snapshot.agents.filter((a) => a.id.startsWith('demo:'));
+    expect(first.length).toBeGreaterThan(0);
+    for (const a of first) expect(a.runState).toBeDefined();
+    const again = office.commit().snapshot.agents.filter((a) => a.id.startsWith('demo:'));
+    expect(again.map((a) => a.runState)).toEqual(first.map((a) => a.runState));
+  });
+
   it('demo misturado: salas no mesmo alocador, contas próprias e liga/desliga', () => {
     const { office, now } = makeOffice();
     office.addMain({ id: 'acc:1', account: 'acc', sessionId: 's1', cwd: '/p/real', role: 'x', startedAt: now(), status: 'idle' });

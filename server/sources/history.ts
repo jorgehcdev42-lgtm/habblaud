@@ -84,6 +84,10 @@ export class SessionHistory implements HistoryProvider {
   readonly provider = 'claude' as const;
   /** Metadados por caminho, válidos enquanto mtime e tamanho forem os mesmos. */
   private cache = new Map<string, { mtimeMs: number; size: number; meta: SessionMeta }>();
+  /** Tamanho atual do cache de metadados (público: o /api/metrics usa para confirmar que o cache não cresce sem limite). */
+  get cacheSize(): number {
+    return this.cache.size;
+  }
   private readonly now: () => number;
   private readonly maxAgeMs: number;
   private readonly limit: number;

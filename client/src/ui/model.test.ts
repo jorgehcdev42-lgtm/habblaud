@@ -9,6 +9,7 @@ import {
   FOREGROUND_WAIT_MS,
   groupRooms,
   hasRunningShells,
+  matchesClassFilter,
   matchesQuery,
   mergeHistory,
   roleLabel,
@@ -353,5 +354,39 @@ describe('textos da espera', () => {
     expect(shellDoneKind({ tool: 'ShellDone', error: true })).toBe('fail');
     expect(shellDoneKind({ tool: 'Bash', error: true })).toBeNull();
     expect(shellDoneKind(undefined)).toBeNull();
+  });
+});
+
+describe('matchesClassFilter / filtro por classificação', () => {
+  const a = (p: Partial<AgentInfo>) => agent({ id: 'x', roomId: 'api', ...p });
+  it("'all' deixa passar todo mundo", () => {
+    expect(matchesClassFilter(a({ status: 'offline' }), 'all')).toBe(true);
+  });
+  it('usa o runState do servidor quando existe', () => {
+    expect(matchesClassFilter(a({ runState: 'ACTIVE' }), 'active')).toBe(true);
+    expect(matchesClassFilter(a({ runState: 'ACTIVE' }), 'idle')).toBe(false);
+    expect(matchesClassFilter(a({ runState: 'IDLE' }), 'idle')).toBe(true);
+    expect(matchesClassFilter(a({ runState: 'HISTORICAL' }), 'historical')).toBe(true);
+  });
+  it('sem runState (servidor antigo/demo), cai no status do agente', () => {
+    expect(matchesClassFilter(a({ status: 'working' }), 'active')).toBe(true);
+    expect(matchesClassFilter(a({ status: 'waiting' }), 'active')).toBe(true);
+    expect(matchesClassFilter(a({ status: 'idle' }), 'idle')).toBe(true);
+    expect(matchesClassFilter(a({ status: 'idle' }), 'active')).toBe(false);
+    expect(matchesClassFilter(a({ status: 'done' }), 'historical')).toBe(true);
+  });
+  it("'temp' só olha a origem; 'historical' exclui os temporários", () => {
+    expect(matchesClassFilter(a({ sessionOrigin: 'TEMP', runState: 'ACTIVE' }), 'temp')).toBe(true);
+    expect(matchesClassFilter(a({ sessionOrigin: 'PROJECT' }), 'temp')).toBe(false);
+    expect(matchesClassFilter(a({ sessionOrigin: 'TEMP', runState: 'HISTORICAL' }), 'historical')).toBe(false);
+  });
+  it("'subagents' pega só kind sub", () => {
+    expect(matchesClassFilter(a({ kind: 'sub' }), 'subagents')).toBe(true);
+    expect(matchesClassFilter(a({ kind: 'main' }), 'subagents')).toBe(false);
+  });
+  it('groupRooms aplica o filtro e conta os resultados', () => {
+    const g = groupRooms(snap, { query: '', hiddenAccounts: new Set(), classFilter: 'subagents' });
+    expect(g.flatMap((r) => r.nodes.map((n) => n.agent.id)).sort()).toEqual(['joao', 'orfao']);
+    expect(groupRooms(snap, { query: '', hiddenAccounts: new Set(), classFilter: 'historical' }).map((r) => r.room.id).sort()).toEqual(['api', 'loja']);
   });
 });

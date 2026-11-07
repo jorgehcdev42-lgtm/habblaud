@@ -13,6 +13,7 @@ import type { RemoteFeature } from './remote';
 import { handleSessionsRoute } from './sessions';
 import type { Hub } from './sse';
 import { handleStatsRoute } from './stats';
+import { handleMetricsRoute } from './metrics';
 import type { TerminalStreams } from './terminal';
 import { tr } from '../../shared/i18n';
 import type { SpawnService } from '../spawn/spawn';
@@ -79,6 +80,12 @@ export interface ApiDeps {
   renameRoom?: (id: string, name: string) => string | undefined;
   /** Estatísticas do "Meu dia" (GET /api/stats, http/stats.ts). */
   stats?: DayStatsService;
+  /** Métricas internas do processo (GET /api/metrics, http/metrics.ts). Opcional: quando ausente, /api/metrics não responde 200 com contagens, mas a rota continua registrada. */
+  metrics?: {
+    history?: { reads: number; cacheSize: number };
+    counts: () => { agents: number; subs: number; rooms: number; accounts: number };
+    startedAt: number;
+  };
   /** Verificação de versão nova no GitHub (GET /api/updates, POST /api/updates/check; updates/checker.ts). */
   updates?: {
     status(): UpdateStatus;
@@ -358,6 +365,18 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
     if (path === '/api/snapshot') {
       if (!isRead) methodNotAllowed(res, 'GET');
       else sendJson(res, 200, hub.current());
+      return true;
+    }
+    if (path === '/api/metrics') {
+      if (!isRead) methodNotAllowed(res, 'GET');
+      else if (deps.metrics) {
+        // Mantemos o formato do `handleMetricsRoute` (deps.metrics) para que a rota também responda
+        // mesmo quando o escritório não tem contadores do Hub ativos (ex.: Habblaud só de métricas).
+        handleMetricsRoute(res, { hub: deps.hub, history: deps.metrics.history, counts: deps.metrics.counts, startedAt: deps.metrics.startedAt }, sendJson);
+      } else {
+        // Sem o módulo de métricas, ainda devolvemos a parte do processo (rss, heap, uptime) para diagnóstico.
+        sendJson(res, 200, { ok: true, uptime: Math.round(process.uptime()), pid: process.pid, rss: process.memoryUsage().rss });
+      }
       return true;
     }
     if (path === '/api/health') {

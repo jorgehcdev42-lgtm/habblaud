@@ -10,6 +10,18 @@ do meio (0.**3**.0).
 
 ## [Não lançado]
 
+### Adicionado
+
+- **Filtros por estado na lista de salas.** Acima da busca da barra lateral, os botões **Todos, Ativos, Ociosos,
+  Históricos, Subagentes e Temporários** deixam só o que interessa na lista. "Ativos" inclui quem está trabalhando,
+  esperando permissão ou rodando um comando (mesmo sem eventos novos há tempo); "Ociosos" é quem está conectado, mas
+  parado; "Temporários" são sessões em `/tmp` e afins. O servidor calcula o estado de cada agente (`runState`,
+  `sessionOrigin`, `agentRole` e `agentClass` no snapshot); sem esses campos (demo ou servidor antigo), o filtro usa o
+  status do agente.
+- **`GET /api/metrics`.** Só leitura, como `/api/health`: memória (RSS e heap), uptime, atraso do laço de eventos,
+  clientes SSE, contagem de agentes, salas e contas, e o cache do histórico. Serve para conferir com número real se uma
+  mudança aliviou o consumo do Habblaud.
+
 ## [1.0.3] - 2026-10-16
 
 ### Corrigido

@@ -1493,6 +1493,46 @@
   outline: none;
 }
 
+/* Filtros de classificação de agentes */
+.ui-class-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.ui-class-filter {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  border: 1px solid var(--ui-line);
+  background: var(--ui-bg-soft);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--filter-color, var(--ui-text));
+  transition:
+    opacity 0.15s,
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.ui-class-filter:hover {
+  background: var(--ui-bg-hover);
+  border-color: var(--filter-color, var(--ui-line));
+}
+
+.ui-class-filter.is-active {
+  background: var(--filter-color, var(--ui-accent));
+  border-color: var(--filter-color, var(--ui-accent));
+  color: var(--ui-bg-solid);
+}
+
+.ui-class-filter.is-active:hover {
+  opacity: 0.9;
+}
+
 .ui-acc-filters {
   display: flex;
   flex-wrap: wrap;
