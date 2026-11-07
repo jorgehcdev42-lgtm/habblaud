@@ -293,12 +293,35 @@ export function aggregateTasks(agents: readonly Pick<AgentInfo, 'tasks'>[]): Tas
 
 // ---------------------------------------------------------------- agrupamento e filtros
 
+export type AgentClassFilter = 'all' | 'active' | 'idle' | 'historical' | 'subagents' | 'temp';
+
 export interface AgentFilter {
   /** Texto livre: nome, papel, título, sala, caminho ou conta. */
   query: string;
   /** Contas ocultas (AccountInfo.id). */
   hiddenAccounts: ReadonlySet<string>;
+  /** Filtro de classificação: 'all' | 'active' | 'idle' | 'historical' | 'subagents' | 'temp' (padrão: 'all') */
+  classFilter?: AgentClassFilter;
 }
+
+export const AGENT_CLASS_FILTER_LABEL: Record<AgentClassFilter, string> = {
+  all: tr('Todos'),
+  active: tr('Ativos'),
+  idle: tr('Ociosos'),
+  historical: tr('Históricos'),
+  subagents: tr('Subagentes'),
+  temp: tr('Temporários'),
+};
+
+/** Cor de cada filtro: variáveis CSS do tema (styles.css), nunca hex fixo. */
+export const AGENT_CLASS_FILTER_COLOR: Record<AgentClassFilter, string> = {
+  all: 'var(--ui-muted)',
+  active: 'var(--st-working)',
+  idle: 'var(--st-idle)',
+  historical: 'var(--st-offline)',
+  subagents: 'var(--st-done)',
+  temp: 'var(--st-waiting)',
+};
 
 export interface AgentNode {
   agent: AgentInfo;
@@ -347,6 +370,26 @@ export function matchesQuery(agent: AgentInfo, room: RoomInfo | undefined, accou
   return q.split(/\s+/).every((term) => hay.includes(term));
 }
 
+/**
+ * Verdadeiro se o agente corresponde ao filtro de classificação (campos calculados pelo servidor, ver
+ * server/sources/registry-classify.ts). Sem eles (servidor antigo ou demo), cai no status do agente.
+ * - 'active': trabalhando, esperando ou rodando comando (runState ACTIVE).
+ * - 'idle': conectado, mas parado.
+ * - 'historical': já encerrado, de projeto real.
+ * - 'subagents': subagentes. 'temp': sessões em diretório temporário.
+ */
+export function matchesClassFilter(agent: AgentInfo, classFilter: AgentClassFilter): boolean {
+  if (classFilter === 'all') return true;
+  if (classFilter === 'subagents') return agent.kind === 'sub';
+  if (classFilter === 'temp') return agent.sessionOrigin === 'TEMP';
+  const runState =
+    agent.runState ??
+    (agent.status === 'offline' || agent.status === 'done' ? 'HISTORICAL' : agent.status === 'idle' ? 'IDLE' : 'ACTIVE');
+  if (classFilter === 'active') return runState === 'ACTIVE';
+  if (classFilter === 'idle') return runState === 'IDLE';
+  return runState === 'HISTORICAL' && agent.sessionOrigin !== 'TEMP';
+}
+
 const byArrival = (a: AgentInfo, b: AgentInfo) => a.startedAt - b.startedAt || a.id.localeCompare(b.id);
 
 /**
@@ -361,7 +404,8 @@ export function groupRooms(snap: Pick<OfficeSnapshot, 'rooms' | 'agents' | 'acco
   const accountOrder = new Map(snap.accounts.map((a, i) => [a.id, i]));
   const query = filter?.query.trim() ?? '';
   const hidden = filter?.hiddenAccounts ?? new Set<string>();
-  const filtering = query.length > 0 || hidden.size > 0;
+  const classFilter = filter?.classFilter ?? 'all';
+  const filtering = query.length > 0 || hidden.size > 0 || classFilter !== 'all';
 
   const byRoom = new Map<string, AgentInfo[]>();
   for (const a of snap.agents) {
@@ -373,7 +417,7 @@ export function groupRooms(snap: Pick<OfficeSnapshot, 'rooms' | 'agents' | 'acco
   const groups: RoomGroup[] = [];
   for (const room of [...snap.rooms].sort((a, b) => a.slot - b.slot)) {
     const agents = (byRoom.get(room.id) ?? []).slice().sort(byArrival);
-    const visible = (a: AgentInfo) => !hidden.has(a.account) && matchesQuery(a, room, accounts.get(a.account), query);
+    const visible = (a: AgentInfo) => !hidden.has(a.account) && matchesQuery(a, room, accounts.get(a.account), query) && matchesClassFilter(a, classFilter);
     const ids = new Set(agents.map((a) => a.id));
     const subsOf = new Map<string, AgentInfo[]>();
     const top: AgentInfo[] = [];
@@ -392,7 +436,7 @@ export function groupRooms(snap: Pick<OfficeSnapshot, 'rooms' | 'agents' | 'acco
     for (const a of top) {
       const subs = subsOf.get(a.id) ?? [];
       const selfVisible = visible(a);
-      const visibleSubs = selfVisible ? subs.filter((s) => !hidden.has(s.account)) : subs.filter(visible);
+      const visibleSubs = selfVisible ? subs.filter((s) => !hidden.has(s.account) && matchesClassFilter(s, classFilter)) : subs.filter(visible);
       if (!selfVisible && visibleSubs.length === 0) continue;
       matches += (selfVisible ? 1 : 0) + visibleSubs.length;
       nodes.push({ agent: a, subs: visibleSubs, subTotal: subs.length });

@@ -3274,4 +3274,14 @@ export const ES: Readonly<Record<string, string>> = {
   "Carimbo deixado na portaria: {0}": "Sello dejado en la recepción: {0}",
   "Entre no prédio ou chegue mais perto da porta para carimbar.": "Entra al edificio o acércate más a la puerta para sellar.",
   "O carimbo não foi deixado. Tente de novo.": "El sello no se dejó. Inténtalo de nuevo.",
+
+  // client/src/ui/model.ts, client/src/ui/sidebar.ts, server/http/metrics.ts
+  "Ativos": "Activos",
+  "Ociosos": "Inactivos",
+  "Históricos": "Finalizados",
+  "Temporários": "Temporales",
+  "Filtrar por estado": "Filtrar por estado",
+  "Nenhum agente com filtro “{0}”.": "Ningún agente con el filtro “{0}”.",
+  "Métricas: falha ao medir o processo ({0}).": "Métricas: falló al medir el proceso ({0}).",
+  "não foi possível medir o processo": "no se pudo medir el proceso",
 };

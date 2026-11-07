@@ -30,6 +30,42 @@ export type Provider = 'claude' | 'codex';
  */
 export type AgentStatus = 'working' | 'waiting' | 'idle' | 'shell' | 'done' | 'offline';
 
+/**
+ * Estado de execução de um agente (separado de origem e papel).
+ * - ACTIVE:  agente ativo com lastEventAt recente (< idleAfterMs), não encerrou.
+ * - IDLE:    agente não encerrou, mas lastEventAt antigo (> idleAfterMs) ou lastEventAt = 0.
+ * - HISTORICAL: agente encerrou (status offline/donE) e cwd fora de temporários.
+ * - UNKNOWN:  startedAt inválido (0 ou NaN).
+ */
+export type AgentRunState = 'ACTIVE' | 'IDLE' | 'HISTORICAL' | 'UNKNOWN';
+
+/**
+ * Origem/destino da sessão (onde o trabalho aconteceu).
+ * - PROJECT: sessão em diretório de projeto normal.
+ * - TEMP: sessão em diretório temporário (/tmp, /var/folders, etc.).
+ * - UNKNOWN: não foi possível determinar.
+ */
+export type SessionOrigin = 'PROJECT' | 'TEMP' | 'UNKNOWN';
+
+/**
+ * Papel do agente na hierarquia.
+ * - MAIN:    agente principal da sessão.
+ * - SUBAGENT: subagente disparado por outro agente.
+ * - UNKNOWN: papel não identificado.
+ */
+export type AgentRole = 'MAIN' | 'SUBAGENT' | 'UNKNOWN';
+
+/**
+ * Classificação de alto nível do agente, calculada em tempo real.
+ * Mantida para compatibilidade; para filtros avançados use runState, sessionOrigin e agentRole.
+ * - ACTIVE:     terminou? não. Último evento? recente (< idleAfterMs).
+ * - IDLE:       terminou? não. Último evento? antigo (> idleAfterMs).
+ * - HISTORICAL: terminou e cwd fora de temporários.
+ * - TEMP:       terminou e cwd em /tmp, /var/folders, etc.
+ * - UNKNOWN:    startedAt inválido.
+ */
+export type AgentClass = 'ACTIVE' | 'IDLE' | 'HISTORICAL' | 'TEMP' | 'UNKNOWN';
+
 /** Um comando de shell que o agente está esperando terminar. */
 export interface ShellJob {
   /** Id da tarefa em segundo plano (ex.: "bo0ov3q3l") ou, em primeiro plano, o id do tool_use. */
@@ -186,6 +222,27 @@ export interface AgentInfo {
    * e perguntou pela caixa de entrada há pouco. Ver POST /api/messages.
    */
   canMessage?: boolean;
+  /**
+   * Classificação de alto nível do agente (ACTIVE | IDLE | HISTORICAL | TEMP | UNKNOWN).
+   * Calculada em tempo real pelo servidor com base em startedAt, lastEventAt e finishedAt.
+   * @deprecated Preferir runState, sessionOrigin e agentRole para filtros avançados.
+   */
+  agentClass?: AgentClass;
+  /**
+   * Estado de execução do agente (separado de origem e papel).
+   * Usado para filtros: Ativos, Ociosos, Históricos.
+   */
+  runState?: AgentRunState;
+  /**
+   * Origem/destino da sessão (onde o trabalho aconteceu).
+   * Usado para filtro: Temporários.
+   */
+  sessionOrigin?: SessionOrigin;
+  /**
+   * Papel do agente na hierarquia.
+   * Usado para filtro: Subagentes.
+   */
+  agentRole?: AgentRole;
 }
 
 export interface RoomInfo {

@@ -29,6 +29,7 @@ import { DemoSimulator } from '../../shared/demo/simulator';
 import { describeGitHubEvent, githubEventKey, RoomEffects, type GitHubEvent } from '../../shared/github';
 import { hash32 } from '../../shared/hash';
 import { applyPermission } from '../permissions/registry';
+import { classifyAll, combineClass, IDLE_AFTER_MS } from '../sources/registry-classify';
 import type { NameStore, StoredCharacter } from './names';
 import { normalizeCwd, roomDisplayNames, SlotAllocator } from './rooms';
 import { tr } from '../../shared/i18n';
@@ -207,6 +208,11 @@ export class Office {
   private rev = 0;
   private dirty = true;
   private last: OfficeSnapshot | null = null;
+  /**
+   * Quando o próximo agente "ativo, mas não ocupado" completa IDLE_AFTER_MS sem sinal. O runState depende do relógio,
+   * mas o snapshot só é refeito quando algo muda; sem isto o agente parado ficaria ACTIVE no cache indefinidamente.
+   */
+  private idleDueAt = Infinity;
   private demo: DemoSimulator | null = null;
   private demoSnap: OfficeSnapshot | null = null;
   private booting = false;
@@ -928,6 +934,8 @@ export class Office {
     }
     // festa acabou / alarme expirou: o snapshot sai sem o efeito
     if (this.effects.prune(now)) this.markDirty();
+    // quem ficou sem sinal por IDLE_AFTER_MS passa a IDLE: refaz o snapshot (o build recalcula o próximo prazo)
+    if (now >= this.idleDueAt) this.markDirty();
     if (removed) {
       const occupied = new Set([...this.agents.values()].map((r) => r.info.roomId));
       for (const id of [...this.rooms.keys()]) if (!occupied.has(id)) this.rooms.delete(id);
@@ -953,6 +961,7 @@ export class Office {
 
   private build(): OfficeSnapshot {
     const now = this.now();
+    this.idleDueAt = Infinity; // classification() recalcula a partir dos agentes deste snapshot
     const entries = new Map(this.rooms);
     for (const r of this.demoSnap?.rooms ?? []) entries.set(r.id, { path: r.path, createdAt: r.createdAt });
     this.slots.sync(entries.keys(), now);
@@ -973,14 +982,17 @@ export class Office {
     }
     const perms = this.deps.permissions?.();
     const real = [...this.agents.values()].map((r) => applyPermission(cloneAgent(r.info), perms?.get(r.info.id)));
+    for (const a of real) Object.assign(a, this.classification(a, this.roomPath(a.roomId), this.agents.get(a.id)?.removeAt, now));
     const reach = this.deps.messages?.();
     // Mensagens pelo escritório: principais presentes cuja sessão está com o plugin conectado. No demo quem decide é
     // o simulador; com o recurso desligado, ninguém recebe.
     for (const a of real) if (reach?.has(a.id) && a.kind === 'main' && a.status !== 'offline' && a.status !== 'done') a.canMessage = true;
+    const demoPaths = new Map((this.demoSnap?.rooms ?? []).map((r) => [r.id, r.path]));
     const demoAgents = (this.demoSnap?.agents ?? []).map((a) => {
-      if (reach || !a.canMessage) return a;
+      // Cópia: o objeto é do simulador e não pode receber os campos de classificação.
       const { canMessage: _off, ...rest } = a;
-      return rest;
+      const base = reach || !a.canMessage ? a : rest;
+      return { ...base, ...this.classification(a, demoPaths.get(a.roomId), undefined, now) };
     });
     const trim = (a: AgentInfo): AgentInfo => (a.recent.length > SNAPSHOT_RECENT ? { ...a, recent: a.recent.slice(-SNAPSHOT_RECENT) } : a);
     const sessions = new Map<string, number>();
@@ -1006,6 +1018,20 @@ export class Office {
         ...(this.deps.world ? { world: this.deps.world() } : {}),
       },
     };
+  }
+
+  /**
+   * Classificação do agente em três dimensões (ver server/sources/registry-classify.ts):
+   * runState (ACTIVE | IDLE | HISTORICAL | UNKNOWN), sessionOrigin (PROJECT | TEMP | UNKNOWN, pelo cwd da sala) e
+   * agentRole (MAIN | SUBAGENT, pelo pai), mais a classe combinada. Quem está trabalhando, esperando ou rodando
+   * comando é sempre ACTIVE. Encerrado é o status offline/done (`removeAt` só diz quando sai do escritório).
+   */
+  private classification(a: AgentInfo, cwd: string | undefined, removeAt: number | undefined, now: number): Pick<AgentInfo, 'agentClass' | 'runState' | 'sessionOrigin' | 'agentRole'> {
+    const finished = a.status === 'offline' || a.status === 'done';
+    const busy = a.status === 'working' || a.status === 'waiting' || a.status === 'shell';
+    const r = classifyAll({ id: a.id, status: a.status, startedAt: a.startedAt, firstSeenAt: a.startedAt, lastEventAt: a.lastEventAt, finishedAt: finished ? (removeAt ?? now) : null, cwd, parent: a.parentId, busy }, { now: () => now });
+    if (r.runState === 'ACTIVE' && !busy && a.lastEventAt) this.idleDueAt = Math.min(this.idleDueAt, a.lastEventAt + IDLE_AFTER_MS + 1);
+    return { agentClass: combineClass(r.runState, r.sessionOrigin), runState: r.runState, sessionOrigin: r.sessionOrigin, agentRole: r.agentRole };
   }
 
   /**
