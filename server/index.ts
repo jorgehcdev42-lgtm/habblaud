@@ -9,6 +9,7 @@ import { AccountsService } from './accounts/service';
 import { isTruthy, loadConfig, messagesOffReason, terminalOffReason, worldSocketUrl } from './config';
 import { createApiHandler, sendJson } from './http/app';
 import { createRequestGuard, isLoopbackHost } from './http/guard';
+import { liveHistory } from './http/metrics';
 import { createRemoteGate, isRemoteRequest, loadSecret, RemoteSessions, startRemoteListener, type RemoteListener } from './http/remote';
 import { Hub } from './http/sse';
 import { createStaticHandler } from './http/static';
@@ -375,7 +376,7 @@ const api = createApiHandler({
   codexLive,
   stats,
   metrics: {
-    history: terminalHistory ? { reads: terminalHistory.reads, get cacheSize() { return terminalHistory?.cacheSize ?? 0; } } : undefined,
+    history: terminalHistory ? liveHistory(terminalHistory) : undefined,
     counts: () => {
       const snap = hub.current();
       const accCount = accounts.allEntries().length;

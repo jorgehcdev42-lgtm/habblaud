@@ -13,7 +13,7 @@ import type { RemoteFeature } from './remote';
 import { handleSessionsRoute } from './sessions';
 import type { Hub } from './sse';
 import { handleStatsRoute } from './stats';
-import { handleMetricsRoute } from './metrics';
+import { handleMetricsRoute, toMB } from './metrics';
 import type { TerminalStreams } from './terminal';
 import { tr } from '../../shared/i18n';
 import type { SpawnService } from '../spawn/spawn';
@@ -123,10 +123,12 @@ function isLoopbackAddress(addr: string | undefined): boolean {
 /**
  * Rotas dos hooks, dos plugins e do auxiliar do host: registrar e esperar pedidos de permissão, buscar as mensagens de
  * uma sessão, as rodadas do auxiliar. Só valem pela porta local; pela remota, nem com login (o celular aprova e manda
- * mensagens pelas rotas da página).
+ * mensagens pelas rotas da página). `/api/metrics` entra aqui por ser diagnóstico da máquina (pid, versão do Node,
+ * disco livre, carga), sem utilidade para quem só acompanha o escritório.
  */
 function isLocalOnlyPath(path: string): boolean {
   return (
+    path === '/api/metrics' ||
     path === '/api/permissions' ||
     /^\/api\/permissions\/[^/]+\/wait$/.test(path) ||
     path === '/api/mod/inbox' ||
@@ -374,8 +376,9 @@ export function createApiHandler(deps: ApiDeps): (req: IncomingMessage, res: Ser
         // mesmo quando o escritório não tem contadores do Hub ativos (ex.: Habblaud só de métricas).
         handleMetricsRoute(res, { hub: deps.hub, history: deps.metrics.history, counts: deps.metrics.counts, startedAt: deps.metrics.startedAt }, sendJson);
       } else {
-        // Sem o módulo de métricas, ainda devolvemos a parte do processo (rss, heap, uptime) para diagnóstico.
-        sendJson(res, 200, { ok: true, uptime: Math.round(process.uptime()), pid: process.pid, rss: process.memoryUsage().rss });
+        // Sem o módulo de métricas, ainda devolvemos a parte do processo (rss, uptime) para diagnóstico, com rss na
+        // mesma unidade (MB) da resposta completa.
+        sendJson(res, 200, { ok: true, uptime: Math.round(process.uptime()), pid: process.pid, rss: toMB(process.memoryUsage().rss) });
       }
       return true;
     }

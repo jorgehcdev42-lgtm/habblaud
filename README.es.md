@@ -929,7 +929,7 @@ mod/      o mod do Habblaud e os plugins de permissões e de mensagens (plugins 
 | `GET /api/timeline/days` | Días grabados para el timelapse, con el tamaño y la hora del primer y del último registro. |
 | `GET /api/timeline/:dia` | Línea de tiempo de un día (`AAAA-MM-DD`), en JSONL (con gzip). |
 | `GET /api/health` | Salud: versión, demostración, Docker, terminal, responder y enviar mensajes desde la oficina, fuentes y estado del uso de cada cuenta. |
-| `GET /api/metrics` | Métricas del proceso (solo lectura): memoria (RSS y heap), uptime, retraso del bucle de eventos, clientes SSE, recuento de agentes, salas y cuentas y tamaño de la caché del historial. |
+| `GET /api/metrics` | Métricas del proceso (solo lectura, solo por el puerto local: 403 en el remoto): memoria (RSS y heap), uptime, retraso del bucle de eventos, clientes SSE, recuento de agentes, salas y cuentas y tamaño de la caché del historial. |
 | `POST /api/demo` | `{"enabled": true \| false}` activa o desactiva los agentes simulados. |
 | `POST /api/rooms/rename` | `{"id": sala, "name": nome}` cambia el nombre de la sala (vacío vuelve al nombre de la carpeta); el nombre queda en `rooms.json`, en la carpeta de datos. Solo con acceso local. |
 | `GET /api/mod/summary` | Para el mod de Claude Code: versión, cuántos agentes hay, cuántos trabajan y quién te necesita (sin la demo y, con `?account=&session=`, sin la propia sesión). |

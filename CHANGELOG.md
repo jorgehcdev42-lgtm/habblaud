@@ -20,7 +20,10 @@ do meio (0.**3**.0).
   status do agente.
 - **`GET /api/metrics`.** Só leitura, como `/api/health`: memória (RSS e heap), uptime, atraso do laço de eventos,
   clientes SSE, contagem de agentes, salas e contas, e o cache do histórico. Serve para conferir com número real se uma
-  mudança aliviou o consumo do Habblaud.
+  mudança aliviou o consumo do Habblaud. Só pela porta local: pela remota devolve 403, porque mostra dados da máquina
+  (pid, versão do Node, disco livre).
+- **Ociosidade que acompanha o relógio.** O escritório refaz o snapshot quando um agente passa 30 s sem sinal; antes, quem
+  parava de dar sinal continuava em "Ativos" (e fora de "Ociosos") até outro evento qualquer mudar o escritório.
 
 ## [1.0.3] - 2026-10-16
 

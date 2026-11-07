@@ -171,6 +171,7 @@ export class Sidebar implements UiComponent {
   private updateClassFilterButtons(): void {
     for (const [key, btn] of this.classFilterBtns) {
       btn.classList.toggle('is-active', key === this.classFilter);
+      btn.setAttribute('aria-pressed', String(key === this.classFilter));
     }
   }
 

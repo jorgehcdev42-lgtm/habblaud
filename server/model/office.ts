@@ -29,7 +29,7 @@ import { DemoSimulator } from '../../shared/demo/simulator';
 import { describeGitHubEvent, githubEventKey, RoomEffects, type GitHubEvent } from '../../shared/github';
 import { hash32 } from '../../shared/hash';
 import { applyPermission } from '../permissions/registry';
-import { classifyAll, combineClass } from '../sources/registry-classify';
+import { classifyAll, combineClass, IDLE_AFTER_MS } from '../sources/registry-classify';
 import type { NameStore, StoredCharacter } from './names';
 import { normalizeCwd, roomDisplayNames, SlotAllocator } from './rooms';
 import { tr } from '../../shared/i18n';
@@ -208,6 +208,11 @@ export class Office {
   private rev = 0;
   private dirty = true;
   private last: OfficeSnapshot | null = null;
+  /**
+   * Quando o próximo agente "ativo, mas não ocupado" completa IDLE_AFTER_MS sem sinal. O runState depende do relógio,
+   * mas o snapshot só é refeito quando algo muda; sem isto o agente parado ficaria ACTIVE no cache indefinidamente.
+   */
+  private idleDueAt = Infinity;
   private demo: DemoSimulator | null = null;
   private demoSnap: OfficeSnapshot | null = null;
   private booting = false;
@@ -929,6 +934,8 @@ export class Office {
     }
     // festa acabou / alarme expirou: o snapshot sai sem o efeito
     if (this.effects.prune(now)) this.markDirty();
+    // quem ficou sem sinal por IDLE_AFTER_MS passa a IDLE: refaz o snapshot (o build recalcula o próximo prazo)
+    if (now >= this.idleDueAt) this.markDirty();
     if (removed) {
       const occupied = new Set([...this.agents.values()].map((r) => r.info.roomId));
       for (const id of [...this.rooms.keys()]) if (!occupied.has(id)) this.rooms.delete(id);
@@ -954,6 +961,7 @@ export class Office {
 
   private build(): OfficeSnapshot {
     const now = this.now();
+    this.idleDueAt = Infinity; // classification() recalcula a partir dos agentes deste snapshot
     const entries = new Map(this.rooms);
     for (const r of this.demoSnap?.rooms ?? []) entries.set(r.id, { path: r.path, createdAt: r.createdAt });
     this.slots.sync(entries.keys(), now);
@@ -1022,6 +1030,7 @@ export class Office {
     const finished = a.status === 'offline' || a.status === 'done';
     const busy = a.status === 'working' || a.status === 'waiting' || a.status === 'shell';
     const r = classifyAll({ id: a.id, status: a.status, startedAt: a.startedAt, firstSeenAt: a.startedAt, lastEventAt: a.lastEventAt, finishedAt: finished ? (removeAt ?? now) : null, cwd, parent: a.parentId, busy }, { now: () => now });
+    if (r.runState === 'ACTIVE' && !busy && a.lastEventAt) this.idleDueAt = Math.min(this.idleDueAt, a.lastEventAt + IDLE_AFTER_MS + 1);
     return { agentClass: combineClass(r.runState, r.sessionOrigin), runState: r.runState, sessionOrigin: r.sessionOrigin, agentRole: r.agentRole };
   }
 

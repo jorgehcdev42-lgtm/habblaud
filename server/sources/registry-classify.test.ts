@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyAgent, classifyAgents, classifyAll, getRunState, getSessionOrigin, getAgentRole, isTempPath, type ClassifiableEntry } from './registry-classify';
+import { classifyAgent, classifyAgents, classifyAll, combineClass, getRunState, getSessionOrigin, getAgentRole, isTempPath, type ClassifiableEntry } from './registry-classify';
 import os from 'node:os';
 
 const base = (): ClassifiableEntry => ({
@@ -197,6 +197,14 @@ describe('isTempPath', () => {
   it('não confunde HOME com /tmp', () => {
     expect(isTempPath('/Users/me/Projetos/JHC')).toBe(false);
   });
+  it('só casa o diretório inteiro: /tmp exato conta, /tmpfoo e /tmp-x não', () => {
+    expect(isTempPath('/tmp')).toBe(true);
+    expect(isTempPath('/tmpfoo')).toBe(false);
+    expect(isTempPath('/tmp-x/a')).toBe(false);
+  });
+  it('resolve o caminho antes de comparar: /tmp/../Users/me sai do /tmp', () => {
+    expect(isTempPath('/tmp/../Users/me')).toBe(false);
+  });
   it('retorna false para undefined', () => {
     expect(isTempPath(undefined)).toBe(false);
     expect(isTempPath(null)).toBe(false);
@@ -225,5 +233,23 @@ describe('busy: trabalhando/esperando nunca é IDLE', () => {
     const opts = { now: () => 10_000 };
     expect(classifyAgents(entries, opts).map((r) => r.class)).toEqual(entries.map((e) => classifyAgent(e, opts)));
     expect(classifyAgents(entries, opts).map((r) => r.class)).toEqual(['ACTIVE', 'HISTORICAL', 'TEMP', 'UNKNOWN', 'ACTIVE']);
+  });
+});
+
+describe('combineClass', () => {
+  it.each([
+    ['ACTIVE', 'PROJECT', 'ACTIVE'],
+    ['ACTIVE', 'TEMP', 'ACTIVE'],
+    ['ACTIVE', 'UNKNOWN', 'ACTIVE'],
+    ['IDLE', 'PROJECT', 'IDLE'],
+    ['IDLE', 'TEMP', 'IDLE'],
+    ['IDLE', 'UNKNOWN', 'IDLE'],
+    ['UNKNOWN', 'PROJECT', 'UNKNOWN'],
+    ['UNKNOWN', 'TEMP', 'UNKNOWN'],
+    ['HISTORICAL', 'PROJECT', 'HISTORICAL'],
+    ['HISTORICAL', 'UNKNOWN', 'HISTORICAL'],
+    ['HISTORICAL', 'TEMP', 'TEMP'], // só o encerrado em diretório temporário vira TEMP
+  ] as const)('%s em %s → %s', (runState, origin, expected) => {
+    expect(combineClass(runState, origin)).toBe(expected);
   });
 });

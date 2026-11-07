@@ -461,6 +461,26 @@ describe('Office', () => {
     expect(office.commit().snapshot.agents.find((a) => a.id === 'acc:2')).toMatchObject({ runState: 'HISTORICAL', agentClass: 'HISTORICAL' });
   });
 
+  it('o runState acompanha o relógio: quem para de dar sinal vira IDLE no tick, sem precisar de outro evento', () => {
+    const { office, advance, now } = makeOffice();
+    office.addMain({ id: 'acc:1', account: 'acc', sessionId: 's1', cwd: '/p/a', role: 'x', startedAt: now(), status: 'idle' });
+    office.addMain({ id: 'acc:2', account: 'acc', sessionId: 's2', cwd: '/p/b', role: 'x', startedAt: now(), status: 'working' });
+    expect(office.commit().snapshot.agents.find((a) => a.id === 'acc:1')?.runState).toBe('ACTIVE'); // acabou de dar sinal
+    advance(20_000);
+    office.tick();
+    expect(office.commit().changed).toBe(false); // ainda dentro dos 30 s: nada a refazer
+    advance(11_000);
+    office.tick();
+    const after = office.commit();
+    expect(after.changed).toBe(true); // o snapshot em cache não pode ficar com o estado velho
+    const byId = new Map(after.snapshot.agents.map((a) => [a.id, a]));
+    expect(byId.get('acc:1')?.runState).toBe('IDLE');
+    expect(byId.get('acc:2')?.runState).toBe('ACTIVE'); // trabalhando nunca vira ocioso
+    advance(60_000);
+    office.tick();
+    expect(office.commit().changed).toBe(false); // sem laço: depois de ocioso, nada mais muda sozinho
+  });
+
   it('o demo também sai classificado, sem alterar os objetos do simulador', () => {
     const { office } = makeOffice();
     office.setDemo(true);

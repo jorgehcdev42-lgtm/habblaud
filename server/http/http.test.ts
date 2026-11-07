@@ -150,8 +150,23 @@ describe('API HTTP', () => {
   it('GET /api/metrics: leve, só leitura, sem contadores quando o módulo não foi ligado', async () => {
     const res = await fetch(`${env.base}/api/metrics`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ ok: true, pid: process.pid });
+    const body = (await res.json()) as { rss: number };
+    expect(body).toMatchObject({ ok: true, pid: process.pid });
+    // mesma unidade da rota completa (MB): em bytes seria da ordem de 1e8
+    expect(body.rss).toBeGreaterThan(1);
+    expect(body.rss).toBeLessThan(1_000_000);
     expect((await fetch(`${env.base}/api/metrics`, { method: 'POST', headers: JSON_HEADERS, body: '{}' })).status).toBe(405);
+  });
+
+  it('GET /api/metrics: só pela porta local; pela remota (pid, versão do Node, disco) é 403 mesmo com login', async () => {
+    const remote = await start({ remote: { is: () => true, allows: () => true } });
+    try {
+      const res = await fetch(`${remote.base}/api/metrics`);
+      expect(res.status).toBe(403);
+      expect(await res.json()).not.toHaveProperty('pid');
+    } finally {
+      remote.cleanup();
+    }
   });
 
   it('GET /api/updates e POST /api/updates/check sem verificador: desligado', async () => {

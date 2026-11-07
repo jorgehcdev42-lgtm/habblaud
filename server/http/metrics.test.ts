@@ -5,7 +5,7 @@
 //  - O event-loop é resumido como zeros até a 5ª amostra.
 //  - Erros internos devolvem 500 com `ok: false` sem levantar exceção.
 import { describe, it, expect } from 'vitest';
-import { handleMetricsRoute } from './metrics';
+import { handleMetricsRoute, liveHistory } from './metrics';
 import type { SessionHistory } from '../sources/history';
 import type { Hub } from './sse';
 import type { ServerResponse } from 'node:http';
@@ -118,5 +118,17 @@ describe('handleMetricsRoute', () => {
     const b = (res as unknown as FakeRes).body as Record<string, unknown>;
     expect((res as unknown as FakeRes).status).toBe(500);
     expect(b.ok).toBe(false);
+  });
+});
+
+describe('liveHistory', () => {
+  it('acompanha o histórico depois de criado: reads e cacheSize não ficam congelados', () => {
+    const source = { reads: 0, cacheSize: 0 };
+    const live = liveHistory(source);
+    expect(live).toEqual({ reads: 0, cacheSize: 0 });
+    source.reads = 3;
+    source.cacheSize = 7;
+    expect(live.reads).toBe(3);
+    expect(live.cacheSize).toBe(7);
   });
 });

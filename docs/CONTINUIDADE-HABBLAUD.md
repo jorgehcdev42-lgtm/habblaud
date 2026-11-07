@@ -29,22 +29,39 @@ bloqueava vitest/vite; vários itens dele estão superados aqui).
   workaround com timer de 100 ms foi descartado).
 - i18n completo (en/es/fr), `CHANGELOG.md` em "Não lançado" e a rota nova nos 4 READMEs.
 
-## Verificação (2026-11-07)
+## Revisão independente (2026-11-07, 2ª rodada)
+
+Três revisores sem contexto do trabalho (TypeScript, falhas silenciosas, cobertura de testes) leram o commit `89f3e6a`.
+Convergiram em dois bugs reais, que eu confirmei no código antes de corrigir (teste vermelho primeiro):
+
+| Achado | Correção |
+|--------|----------|
+| `history.reads` do `/api/metrics` congelado em 0 (o número era copiado ao montar as deps; só `cacheSize` era getter) | `liveHistory()` em `server/http/metrics.ts`, usado em `server/index.ts` |
+| `runState` velho: o snapshot só é refeito quando algo muda, então quem parava de dar sinal ficava ACTIVE no cache | `Office` guarda `idleDueAt` e o `tick()` refaz o snapshot quando um agente cruza `IDLE_AFTER_MS` |
+| `/api/metrics` pela porta remota (pid, versão do Node, disco) | entrou em `isLocalOnlyPath`: 403 no remoto |
+| `rss` em bytes no fallback e em MB na rota completa | fallback usa o mesmo `toMB` |
+| botões de filtro sem `aria-pressed` | atributo atualizado junto com `is-active` |
+
+Não corrigido de propósito (decisão de produto, não bug): o filtro "Temporários" casa qualquer `sessionOrigin === 'TEMP'`
+(inclusive agente ativo), enquanto a classe `agentClass === 'TEMP'` só vale para encerrado; `eventLoop` sai zerado nos
+primeiros ~5 s (o campo `samples` diz que ainda não há amostra).
+
+## Verificação (2026-11-07, depois da revisão)
 
 | Item | Resultado |
 |------|-----------|
-| `npm run typecheck` | limpo |
-| `npm run i18n:check` | 2990/2990 em en, es e fr |
-| `npm run build` | ok |
-| `npm test` | ~1917 verdes; sobram só testes **sensíveis à carga da máquina** (ver abaixo) |
-| Servidor do build em demo | `/api/metrics` responde; agentes saem classificados |
+| `npm run typecheck` | exit 0 |
+| `npm run i18n:check` | exit 0, 2990/2990 em en, es e fr |
+| `npm run build` | exit 0 |
+| `npm test` completo | 1943 verdes, 2 ignorados, **1 falha** (`server/world/uplink.test.ts`, exit 1) |
+| Falha do uplink | **preexistente**: falha igual no v1.0.3 puro (`faa1a01`), provado em worktree limpa nas duas rodadas |
 
-### Testes que falham por carga (não por código)
+### Testes sensíveis à carga da máquina
 
-Com load average 20–40 (WebKit/WindowServer consumindo CPU) falham, de forma intermitente: `server/world/uplink.test.ts`
-(falha **também no v1.0.3 puro**, provado em worktree limpo), `server/messages/codex.test.ts` (prazo de 400 ms pra um
-binário falso), e às vezes `server/test/codex-hook`, `permission-hook`, `build.test`, `art.test`. Passam com a máquina
-folgada ou com `npx vitest run <arquivo> --maxWorkers=1`. Dica: fechar apps pesados antes de rodar a suíte.
+Com load average 15–30 falham, de forma intermitente, testes que sobem subprocesso ou têm prazo curto:
+`server/world/uplink.test.ts` (sempre, também no v1.0.3 puro), `server/messages/codex.test.ts` (prazo de 400 ms para um
+binário falso; falha igual no v1.0.3 puro quando roda sozinho), e às vezes `server/spawn`, `server/build.test.ts`. Passam
+com a máquina folgada ou com `npx vitest run <arquivo> --maxWorkers=1`. Dica: fechar apps pesados antes de rodar a suíte.
 
 ## Próximos passos sugeridos
 

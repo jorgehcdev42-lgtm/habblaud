@@ -13,10 +13,31 @@ import { errMsg, log } from '../log';
 
 type Send = (res: ServerResponse, status: number, body: unknown) => void;
 
+/** Contadores do histórico do terminal que a rota lê a cada requisição. */
+export interface HistoryStats {
+  reads: number;
+  cacheSize: number;
+}
+
+/**
+ * Visão ao vivo do histórico: cada leitura de `reads`/`cacheSize` consulta a fonte naquele instante. Copiar os números
+ * ao montar as dependências os congelaria no valor da partida.
+ */
+export function liveHistory(source: HistoryStats): HistoryStats {
+  return {
+    get reads() {
+      return source.reads;
+    },
+    get cacheSize() {
+      return source.cacheSize;
+    },
+  };
+}
+
 export interface MetricsDeps {
   hub: Hub;
-  /** Leituras e tamanho do cache do histórico do terminal (SessionHistory). */
-  history?: { reads: number; cacheSize: number };
+  /** Leituras e tamanho do cache do histórico do terminal (SessionHistory); passar por `liveHistory`. */
+  history?: HistoryStats;
   /** Sobe após um `addMain`/`addSub`. */
   counts: () => { agents: number; subs: number; rooms: number; accounts: number };
   startedAt: number;
@@ -25,7 +46,7 @@ export interface MetricsDeps {
 /** Limites da janela móvel do event-loop lag (ms). */
 const LAG_WINDOW = 50;
 /** Bytes a serem mostrados em MB com uma casa. */
-const toMB = (b: number): number => Math.round((b / (1024 * 1024)) * 10) / 10;
+export const toMB = (b: number): number => Math.round((b / (1024 * 1024)) * 10) / 10;
 
 interface LagState {
   samples: number[];

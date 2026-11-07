@@ -46,6 +46,9 @@ export interface ClassifyOptions {
 
 const DEFAULTS = Object.freeze({ idleAfterMs: 30_000 });
 
+/** Sem sinal por mais que isto, um agente que não está ocupado deixa de ser ACTIVE e passa a IDLE. */
+export const IDLE_AFTER_MS = DEFAULTS.idleAfterMs;
+
 const TMP_PREFIXES: ReadonlyArray<string> = Object.freeze([
   os.tmpdir(),
   '/tmp',
